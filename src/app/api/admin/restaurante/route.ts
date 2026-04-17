@@ -4,9 +4,13 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getRestauranteId } from '@/lib/auth/get-restaurante-id'
 import { revalidatePath } from 'next/cache'
 import { geocodeAddress } from '@/server/geolocation/geocodeAddress'
+import { isMissingColumnError } from '@/server/admin/schemaFallback'
 
 const CAMPOS_RETORNO =
   'id, slug, nome, logo_url, tipo, aceita_entrega, aceita_retirada, taxa_entrega, latitude, longitude, taxa_base_entrega, taxa_por_km, max_distance_km, minimum_fee, free_delivery_threshold, delivery_mode, fallback_distance_enabled, fallback_max_distance_km'
+
+const CAMPOS_RETORNO_LEGACY =
+  'id, slug, nome, logo_url, tipo, aceita_entrega, aceita_retirada, taxa_entrega, latitude, longitude'
 
 const PatchSchema = z.object({
   nome: z.string().trim().min(1, 'Nome obrigatório').optional(),
@@ -45,6 +49,31 @@ export async function GET() {
     .select(CAMPOS_RETORNO)
     .eq('id', restauranteId)
     .single()
+
+  if (isMissingColumnError(error, 'restaurantes.max_distance_km')) {
+    const { data: legacyData, error: legacyError } = await supabase
+      .from('restaurantes')
+      .select(CAMPOS_RETORNO_LEGACY)
+      .eq('id', restauranteId)
+      .single()
+
+    if (legacyError || !legacyData) {
+      console.error('[GET /api/admin/restaurante] erro legacy:', legacyError)
+      return NextResponse.json({ error: 'Erro ao buscar configurações' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      ...legacyData,
+      taxa_base_entrega: Number(legacyData.taxa_entrega ?? 0),
+      taxa_por_km: 0,
+      max_distance_km: 8,
+      minimum_fee: Number(legacyData.taxa_entrega ?? 0),
+      free_delivery_threshold: null,
+      delivery_mode: 'distance_only',
+      fallback_distance_enabled: true,
+      fallback_max_distance_km: null,
+    })
+  }
 
   if (error) {
     console.error('[GET /api/admin/restaurante] erro:', error)

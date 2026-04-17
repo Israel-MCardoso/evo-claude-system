@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getRestauranteId } from '@/lib/auth/get-restaurante-id'
+import { isMissingTableError } from '@/server/admin/schemaFallback'
 
 const DeliveryZoneSchema = z.object({
   name: z.string().trim().min(1, 'Nome obrigatório'),
@@ -29,6 +30,9 @@ export async function GET() {
       .order('created_at', { ascending: true })
 
     if (error) {
+      if (isMissingTableError(error, 'delivery_zones')) {
+        return NextResponse.json({ zones: [] })
+      }
       console.error('[GET /api/admin/delivery-zones] erro:', error)
       return NextResponse.json({ error: 'Erro ao buscar zonas de entrega' }, { status: 500 })
     }
