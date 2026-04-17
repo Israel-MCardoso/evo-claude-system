@@ -69,6 +69,12 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
+      if (isMissingTableError(error, 'delivery_zones')) {
+        return NextResponse.json(
+          { error: 'Zonas de entrega ainda não estão disponíveis neste ambiente' },
+          { status: 409 }
+        )
+      }
       console.error('[POST /api/admin/delivery-zones] erro:', error)
       return NextResponse.json({ error: 'Erro ao criar zona de entrega' }, { status: 500 })
     }

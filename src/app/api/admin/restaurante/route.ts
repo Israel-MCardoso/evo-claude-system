@@ -12,6 +12,17 @@ const CAMPOS_RETORNO =
 const CAMPOS_RETORNO_LEGACY =
   'id, slug, nome, logo_url, tipo, aceita_entrega, aceita_retirada, taxa_entrega, latitude, longitude'
 
+const LEGACY_SUPPORTED_UPDATE_FIELDS = [
+  'nome',
+  'logo_url',
+  'taxa_entrega',
+  'aceita_entrega',
+  'aceita_retirada',
+  'tipo',
+  'latitude',
+  'longitude',
+] as const
+
 const PatchSchema = z.object({
   nome: z.string().trim().min(1, 'Nome obrigatório').optional(),
   logo_url: z.string().url('URL inválida').optional().nullable(),
@@ -138,16 +149,57 @@ export async function PATCH(request: Request) {
     dadosUpdate.longitude = coords.lng
   }
 
-  if (Object.keys(dadosUpdate).length === 0) {
-    return NextResponse.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })
-  }
-
   const { data, error } = await supabase
     .from('restaurantes')
     .update(dadosUpdate)
     .eq('id', restauranteId)
     .select(CAMPOS_RETORNO)
     .single()
+
+  if (isMissingColumnError(error, 'restaurantes.max_distance_km')) {
+    const legacyUpdate = Object.fromEntries(
+      Object.entries(dadosUpdate).filter(([key]) =>
+        (LEGACY_SUPPORTED_UPDATE_FIELDS as readonly string[]).includes(key)
+      )
+    )
+
+    if (Object.keys(legacyUpdate).length > 0) {
+      const { error: legacyUpdateError } = await supabase
+        .from('restaurantes')
+        .update(legacyUpdate)
+        .eq('id', restauranteId)
+
+      if (legacyUpdateError) {
+        console.error('[PATCH /api/admin/restaurante] erro legacy update:', legacyUpdateError)
+        return NextResponse.json({ error: 'Erro ao salvar configurações' }, { status: 500 })
+      }
+    }
+
+    const { data: legacyData, error: legacySelectError } = await supabase
+      .from('restaurantes')
+      .select(CAMPOS_RETORNO_LEGACY)
+      .eq('id', restauranteId)
+      .single()
+
+    if (legacySelectError || !legacyData) {
+      console.error('[PATCH /api/admin/restaurante] erro legacy select:', legacySelectError)
+      return NextResponse.json({ error: 'Erro ao salvar configurações' }, { status: 500 })
+    }
+
+    revalidatePath(`/${legacyData.slug}`)
+
+    return NextResponse.json({
+      ...legacyData,
+      taxa_base_entrega: Number(legacyData.taxa_entrega ?? 0),
+      taxa_por_km: 0,
+      max_distance_km: 8,
+      minimum_fee: Number(legacyData.taxa_entrega ?? 0),
+      free_delivery_threshold: null,
+      delivery_mode: 'distance_only',
+      fallback_distance_enabled: true,
+      fallback_max_distance_km: null,
+    })
+  }
 
   if (error) {
     console.error('[PATCH /api/admin/restaurante] erro:', error)

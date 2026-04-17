@@ -10,7 +10,14 @@ function getErrorText(error: QueryLikeError | null | undefined): string {
 
 export function isMissingColumnError(error: QueryLikeError | null | undefined, column: string): boolean {
   const normalizedColumn = column.toLowerCase()
-  return getErrorText(error).includes(normalizedColumn) && getErrorText(error).includes('does not exist')
+  const columnName = normalizedColumn.includes('.') ? normalizedColumn.split('.').at(-1)! : normalizedColumn
+  const text = getErrorText(error)
+
+  return (
+    (text.includes(normalizedColumn) && text.includes('does not exist')) ||
+    (text.includes(`'${columnName}' column`) && text.includes('schema cache')) ||
+    (text.includes(`"${columnName}"`) && text.includes('does not exist'))
+  )
 }
 
 export function isMissingTableError(error: QueryLikeError | null | undefined, table: string): boolean {

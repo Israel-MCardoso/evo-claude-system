@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getRestauranteId } from '@/lib/auth/get-restaurante-id'
+import { isMissingTableError } from '@/server/admin/schemaFallback'
 
 const PatchSchema = z.object({
   name: z.string().trim().min(1).optional(),
@@ -40,6 +41,12 @@ export async function PATCH(
       .single()
 
     if (error || !data) {
+      if (isMissingTableError(error, 'delivery_zones')) {
+        return NextResponse.json(
+          { error: 'Zonas de entrega ainda não estão disponíveis neste ambiente' },
+          { status: 409 }
+        )
+      }
       if (error?.code === 'PGRST116') {
         return NextResponse.json({ error: 'Zona de entrega nao encontrada' }, { status: 404 })
       }
