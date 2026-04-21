@@ -1,4 +1,4 @@
-import type { RestaurantMemberRole } from '@/types/database'
+import type { RestaurantMemberRole } from '@/server/team/invitations'
 
 const ROLE_ALIASES: Record<string, RestaurantMemberRole> = {
   manager: 'admin',

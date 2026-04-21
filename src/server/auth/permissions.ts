@@ -5,7 +5,7 @@ import {
   getRestaurantBillingAccessSummary,
 } from '@/server/billing/access'
 import { logWarn } from '@/server/observability/logger'
-import type { RestaurantMemberRole } from '@/types/database'
+import type { RestaurantMemberRole } from '@/server/team/invitations'
 
 export type RestaurantPermission =
   | 'orders.read'
